@@ -28,8 +28,9 @@ transforms:
       }
       # Map gelf short_message / full_message to msg
       record.msg = del(record.full_message)
+      short_msg = del(record.short_message)
       if record.msg == null {
-        record.msg = del(record.short_message)
+        record.msg = short_msg
       }
       # Put "msg"/"level" before the other fields
       . = encode_logfmt!(record, ["msg", "level"])
