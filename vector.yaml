@@ -1,0 +1,44 @@
+sources:
+  fluentd:
+    type: fluent
+    address: 0.0.0.0:9000
+    keepalive:
+      time_secs: 60
+    log_namespace: true
+
+transforms:
+  gelf_to_logfmt:
+    type: remap
+    inputs:
+      - fluentd
+    source: |
+      log(%fluent)
+      # TODO: Mehr vom graylog metadata wegschmeißen?
+      # https://go2docs.graylog.org/5-0/getting_in_log_data/gelf.html
+      record = object!(%fluent.record)
+      # Filter out all keys starting with _
+      record = filter(record) -> |key, _value| {
+        !starts_with(key, "_")
+      }
+      # We don't need the gelf version
+      del(record.version)
+      # Rewrite the level
+      if exists(record.level) && is_integer(record.level) {
+        record.level = to_syslog_level!(record.level)
+      }
+      # Map gelf short_message / full_message to msg
+      record.msg = del(record.full_message)
+      if record.msg == null {
+        record.msg = del(record.short_message)
+      }
+      # Put "msg"/"level" before the other fields
+      . = encode_logfmt!(record, ["msg", "level"])
+
+sinks:
+  console:
+    inputs:
+      - gelf_to_logfmt
+    target: stdout
+    type: console
+    encoding:
+      codec: json
